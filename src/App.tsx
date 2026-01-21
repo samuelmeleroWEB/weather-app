@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { getWeatherData } from "./services/weatherService";
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -22,6 +22,12 @@ const App = () => {
   const [city, setCity] = useState("");
   const [weather, setWeather] = useState<WeatherInfo | null>(null);
   const [loading, setLoading] = useState(false);
+  
+  // Nuevo estado para el historial: Se inicializa con lo que haya en localStorage
+  const [history, setHistory] = useState<string[]>(() => {
+    const saved = localStorage.getItem("weatherHistory");
+    return saved ? JSON.parse(saved) : [];
+  });
 
   const weatherConfig: Record<string, { bg: string; advice: string; icon: string }> = {
     Clear: {
@@ -56,16 +62,29 @@ const App = () => {
     },
   };
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!city) return;
+  // Función de búsqueda (admite evento de formulario o una ciudad directa del historial)
+  const handleSearch = async (e?: React.FormEvent, cityFromHistory?: string) => {
+    if (e) e.preventDefault();
+    
+    const cityToSearch = cityFromHistory || city;
+    if (!cityToSearch) return;
 
     setLoading(true);
-    setWeather(null); // Limpiamos el clima anterior al buscar uno nuevo
+    setWeather(null); 
     
     try {
-      const data = await getWeatherData(city);
+      const data = await getWeatherData(cityToSearch);
       setWeather(data);
+      
+      // Actualizar historial: Evitar duplicados y guardar solo los últimos 5
+      setHistory(prev => {
+        const filtered = prev.filter(item => item.toLowerCase() !== data.city.toLowerCase());
+        const newHistory = [data.city, ...filtered].slice(0, 5);
+        localStorage.setItem("weatherHistory", JSON.stringify(newHistory));
+        return newHistory;
+      });
+
+      setCity(""); // Limpiar input
     } catch (error) {
       alert("No se encontró la ciudad. Inténtalo de nuevo.");
     } finally {
@@ -73,7 +92,11 @@ const App = () => {
     }
   };
 
-  // Obtenemos la clase de fondo (ahora correctamente)
+  const clearHistory = () => {
+    setHistory([]);
+    localStorage.removeItem("weatherHistory");
+  };
+
   const currentBgClass = weather 
     ? (weatherConfig[weather.condition]?.bg || weatherConfig.Default.bg) 
     : weatherConfig.Default.bg;
@@ -85,11 +108,11 @@ const App = () => {
         <h1 className="text-3xl font-bold text-center mb-6">Weather Mood</h1>
 
         {/* Buscador */}
-        <form onSubmit={handleSearch} className="flex gap-2 mb-8">
+        <form onSubmit={(e) => handleSearch(e)} className="flex gap-2 mb-4">
           <input
             type="text"
             placeholder="Escribe una ciudad..."
-            className="flex-1 px-4 py-2 rounded-xl bg-white/20 border border-white/30 focus:outline-none focus:ring-2 focus:ring-white/50 placeholder:text-white/70"
+            className="flex-1 px-4 py-2 rounded-xl bg-white/20 border border-white/30 focus:outline-none focus:ring-2 focus:ring-white/50 placeholder:text-white/70 text-white"
             value={city}
             onChange={(e) => setCity(e.target.value)}
           />
@@ -102,18 +125,39 @@ const App = () => {
           </button>
         </form>
 
+        {/* Historial de búsquedas */}
+        {history.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-8 justify-center">
+            {history.map((h) => (
+              <button
+                key={h}
+                onClick={() => handleSearch(undefined, h)}
+                className="text-xs bg-white/10 hover:bg-white/25 px-3 py-1 rounded-full transition-colors border border-white/10"
+              >
+                {h}
+              </button>
+            ))}
+            <button 
+              onClick={clearHistory}
+              className="text-xs text-red-200/60 hover:text-red-200 px-2 transition-colors"
+            >
+              Borrar
+            </button>
+          </div>
+        )}
+
         {/* Sección de Carga */}
         {loading && <Spinner />}
 
         {/* Info del Clima con Animación */}
-        <AnimatePresence>
+        <AnimatePresence mode="wait">
           {weather && !loading && (
             <motion.div
               key={weather.city}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              transition={{ duration: 0.5 }}
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.4 }}
               className="text-center"
             >
               <div className="text-8xl mb-4">
