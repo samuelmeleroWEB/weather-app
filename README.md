@@ -26,16 +26,10 @@
 3. Crea un archivo `.env` en la raíz del proyecto.
 4. Ejecuta: `npm run dev`
 
-## ☁️ Despliegue en Vercel
+## 🌍 Live Demo
 
-Este proyecto está preparado para ser desplegado fácilmente en Vercel.
-
-1. Inicia sesión en [Vercel](https://vercel.com/) y haz clic en **"Add New Project"**.
-2. Importa este repositorio desde tu cuenta de GitHub.
-3. En la sección de **"Environment Variables"**, **DEBES** añadir obligatoriamente estas claves antes de darle a *Deploy*:
-   - `VITE_WEATHER_API_KEY` (Clave de OpenWeatherMap API)
-   - `VITE_UNSPLASH_ACCESS_KEY` (Clave de acceso de Unsplash Developers API)
-4. Haz clic en **Deploy** y espera unos segundos. ¡Tu aplicación estará viva en producción!
+¡Prueba la aplicación en vivo!  
+👉 **[Ver Weather Mood App en Vercel](https://weather-mood-app.vercel.app/)** *(Sustituye este enlace con tu URL final de Vercel una vez desplegado)*
 
 ---
 Desarrollado con ❤️ por Samuel Melero
