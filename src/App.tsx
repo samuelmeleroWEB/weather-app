@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { getWeatherData, getCityImage, getCitySuggestions, getExtendedForecast, getAirQuality, getWeatherByCoords, getStateFromCoords, weatherCodeToKey, getHourlyForDay } from "./services/weatherService"; 
 import { motion, AnimatePresence } from 'framer-motion';
 import { DailyForecast } from "./components/DailyForecast";
@@ -56,6 +56,7 @@ const WeatherIcon = ({ condition, className = "w-12 h-12" }: { condition: string
 
 const WeatherApp = () => {
   const { language, setLanguage, translate, formatTemp } = usePreferences();
+  const searchIdRef = useRef(0);
   
   const [city, setCity] = useState("");
   const [suggestions, setSuggestions] = useState<{name: string, full: string, country: string, lat?: number, lon?: number, state?: string}[]>([]);
@@ -165,7 +166,8 @@ const WeatherApp = () => {
             const freshData = fav.coord 
               ? await getWeatherByCoords(fav.coord.lat, fav.coord.lon, language)
               : await getWeatherData(fav.city, language);
-            return { ...freshData, image: fav.image }; 
+            // Preservar el nombre original de la ciudad y las coordenadas para que no lo sobrescriba la API en el refresh
+            return { ...freshData, image: fav.image, city: fav.city, coord: fav.coord || freshData.coord }; 
           } catch (error) {
             console.error(`Failed to update favorite ${fav.city}:`, error);
             return fav; 
@@ -208,19 +210,30 @@ const WeatherApp = () => {
     Drizzle: { bg: "from-slate-600 via-slate-500 to-teal-700", text: "text-teal-100" },
     Mist: { bg: "from-gray-400 via-slate-400 to-zinc-400", text: "text-gray-100" },
     Fog: { bg: "from-gray-400 via-slate-400 to-zinc-400", text: "text-gray-100" },
-    Default: { bg: "from-blue-500 via-indigo-500 to-purple-500", text: "text-white" },
+    Default: { bg: "from-slate-900 via-zinc-900 to-slate-950", text: "text-slate-200" },
   };
 
   const handleLocationClick = () => {
     if (navigator.geolocation) {
+      const currentSearchId = ++searchIdRef.current;
       setLoading(true);
       navigator.geolocation.getCurrentPosition(async (position) => {
+        if (currentSearchId !== searchIdRef.current) return;
         const { latitude, longitude } = position.coords;
         try {
           const data = await getWeatherByCoords(latitude, longitude, language);
+          if (currentSearchId !== searchIdRef.current) return;
           const regionState = await getStateFromCoords(latitude, longitude);
+          if (currentSearchId !== searchIdRef.current) return;
           await handleSearch(undefined, { name: data.city, country: data.country, lat: latitude, lon: longitude, state: regionState || undefined });
         } catch (error) {
+          if (currentSearchId === searchIdRef.current) {
+            alert("Error al obtener ubicación.");
+            setLoading(false);
+          }
+        }
+      }, () => {
+        if (currentSearchId === searchIdRef.current) {
           alert("Error al obtener ubicación.");
           setLoading(false);
         }
@@ -233,6 +246,9 @@ const WeatherApp = () => {
     const cityToSearch = selectedCity ? `${selectedCity.name},${selectedCity.country}` : city;
 
     if (!cityToSearch) return;
+    
+    const currentSearchId = ++searchIdRef.current;
+    
     setLoading(true);
     setSuggestions([]);
 
@@ -240,8 +256,12 @@ const WeatherApp = () => {
       let weatherData;
       if (selectedCity && selectedCity.lat && selectedCity.lon) {
         weatherData = await getWeatherByCoords(selectedCity.lat, selectedCity.lon, language);
+        if (currentSearchId !== searchIdRef.current) return;
+        weatherData.city = selectedCity.name; // Forzar el nombre seleccionado para evitar localizaciones extrañas de la API (ej: Cordova x Córdoba)
       } else {
         weatherData = await getWeatherData(cityToSearch, language);
+        if (currentSearchId !== searchIdRef.current) return;
+        if (selectedCity) weatherData.city = selectedCity.name;
       }
       const lat = selectedCity?.lat || weatherData.coord?.lat;
       const lon = selectedCity?.lon || weatherData.coord?.lon;
@@ -251,6 +271,7 @@ const WeatherApp = () => {
       let stateToSearch = selectedCity?.state;
       if (!stateToSearch) {
          stateToSearch = await getStateFromCoords(lat, lon) || undefined;
+         if (currentSearchId !== searchIdRef.current) return;
       }
 
       const [imageUrl, extended, airInfo] = await Promise.all([
@@ -258,6 +279,8 @@ const WeatherApp = () => {
         getExtendedForecast(lat, lon),
         getAirQuality(lat, lon)
       ]);
+
+      if (currentSearchId !== searchIdRef.current) return;
 
       // Save raw extended data for time travel
       setFullExtendedData(extended);
@@ -332,10 +355,14 @@ const WeatherApp = () => {
       });
       setCity("");
     } catch (error) {
-      console.error(error);
-      alert(translate('searchError') || "Error");
+      if (currentSearchId === searchIdRef.current) {
+        console.error(error);
+        alert(translate('searchError') || "Error");
+      }
     } finally {
-      setLoading(false);
+      if (currentSearchId === searchIdRef.current) {
+        setLoading(false);
+      }
     }
   };
 
@@ -358,7 +385,7 @@ const WeatherApp = () => {
   };
 
   const SidebarCard = ({ item, onRemove }: { item: WeatherInfo, onRemove: () => void }) => (
-    <div className="glass-card glass-card-hover group relative rounded-2xl overflow-hidden mb-3 cursor-pointer" onClick={() => handleSearch(undefined, { name: item.city, country: item.country || '' })}>
+    <div className="glass-card glass-card-hover group relative rounded-2xl overflow-hidden mb-3 cursor-pointer" onClick={() => handleSearch(undefined, { name: item.city, country: item.country || '', lat: item.coord?.lat, lon: item.coord?.lon })}>
       {item.image && <img src={item.image} className="absolute inset-0 w-full h-full object-cover opacity-30 group-hover:opacity-50 transition-all duration-500 scale-100 group-hover:scale-110" alt="" />}
       <div className="relative z-10 w-full h-full p-4 flex items-center justify-between text-left">
         <div>

@@ -1,156 +1,149 @@
 const API_KEY = import.meta.env.VITE_WEATHER_API_KEY;
 const UNSPLASH_KEY = import.meta.env.VITE_UNSPLASH_ACCESS_KEY;
-const ROOT_URL = 'https://api.openweathermap.org/data/2.5';
 
-// Helper to map Open-Meteo WMO codes to translation keys
+const OPENWEATHER_API = 'https://api.openweathermap.org/data/2.5';
+const OPEN_METEO_API = 'https://api.open-meteo.com/v1';
+const AIR_QUALITY_API = 'https://air-quality-api.open-meteo.com/v1';
+const NOMINATIM_API = 'https://nominatim.openstreetmap.org';
+
+type Language = 'es' | 'en';
+
 export const weatherCodeToKey = (code: number): string => {
-  const weatherMap: { [key: number]: string } = {
-    0: 'Clear', 1: 'Clear', 2: 'Clouds', 3: 'Clouds',
-    45: 'Fog', 48: 'Fog',
-    51: 'Drizzle', 53: 'Drizzle', 55: 'Drizzle',
-    56: 'Drizzle', 57: 'Drizzle',
-    61: 'Rain', 63: 'Rain', 65: 'Rain',
-    66: 'Rain', 67: 'Rain',
-    71: 'Snow', 73: 'Snow', 75: 'Snow',
-    77: 'Snow',
-    80: 'Rain', 81: 'Rain', 82: 'Rain',
-    85: 'Snow', 86: 'Snow',
-    95: 'Thunderstorm', 96: 'Thunderstorm', 99: 'Thunderstorm'
-  };
-  return weatherMap[code] || 'Clear';
+  if (code <= 1) return 'Clear';
+  if (code <= 3) return 'Clouds';
+  if (code <= 48) return 'Fog';
+  if (code <= 57) return 'Drizzle';
+  if (code <= 67 || (code >= 80 && code <= 82)) return 'Rain';
+  if ((code >= 71 && code <= 77) || code === 85 || code === 86) return 'Snow';
+  if (code >= 95) return 'Thunderstorm';
+  return 'Clear';
 };
 
-export const getWeatherData = async (city: string, lang: 'es' | 'en' = 'es') => {
-  const response = await fetch(`${ROOT_URL}/weather?q=${city}&appid=${API_KEY}&units=metric&lang=${lang}`);
-  if (!response.ok) throw new Error("City not found");
-  const data = await response.json();
-  return {
-    city: data.name,
-    temp: Math.round(data.main.temp),
-    condition: data.weather[0].main,
-    description: data.weather[0].description,
-    humidity: data.main.humidity,
-    wind: Math.round(data.wind.speed * 3.6),
-    country: data.sys.country,
-    coord: data.coord // Return coords for further calls
-  };
+const fetchJson = async <T>(url: string, errorMessage = 'Fetch error'): Promise<T> => {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(errorMessage);
+  return response.json();
 };
 
-// Helper to try multiple search queries
-export const getCityImage = async (cityName: string, country?: string, state?: string) => {
+const mapOpenWeatherResponse = (data: any) => ({
+  city: data.name,
+  temp: Math.round(data.main.temp),
+  condition: data.weather[0].main,
+  description: data.weather[0].description,
+  humidity: data.main.humidity,
+  wind: Math.round(data.wind.speed * 3.6),
+  country: data.sys.country,
+  coord: data.coord
+});
+
+export const getWeatherData = async (city: string, lang: Language = 'es') => {
+  const searchCity = city.toLowerCase().includes(',es') || city.toLowerCase().includes(', es') ? city : `${city},ES`;
+  const url = `${OPENWEATHER_API}/weather?q=${searchCity}&appid=${API_KEY}&units=metric&lang=${lang}`;
+  const data = await fetchJson<any>(url, "City not found");
+  return mapOpenWeatherResponse(data);
+};
+
+export const getWeatherByCoords = async (lat: number, lon: number, lang: Language = 'es') => {
+  const url = `${OPENWEATHER_API}/weather?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric&lang=${lang}`;
+  const data = await fetchJson<any>(url, "Weather not found for coordinates");
+  return mapOpenWeatherResponse(data);
+};
+
+const fetchUnsplashImage = async (query: string): Promise<string | null> => {
   try {
-    const trySearch = async (query: string) => {
-      const res = await fetch(`https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&client_id=${UNSPLASH_KEY}&per_page=1&orientation=landscape`);
-      if (!res.ok) return null;
-      const data = await res.json();
-      return data.results?.[0]?.urls?.regular || null;
-    };
-
-    // 1. Try "City, Country"
-    let img = country ? await trySearch(`${cityName} ${country} city`) : null;
-    if (img) return img;
-
-    // 2. Try just "City"
-    img = await trySearch(`${cityName} city`);
-    if (img) return img;
-
-    // 3. Fallback: Try State/Province if available
-    if (state) {
-      img = country ? await trySearch(`${state} province ${country}`) : await trySearch(`${state} province`);
-      if (img) return img;
-
-      // 4. Try just state name
-      img = await trySearch(`${state} landscape`);
-      if (img) return img;
-    }
-
-    return null;
-  } catch (error) {
-    console.error("Unsplash Error:", error);
+    const url = `https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&client_id=${UNSPLASH_KEY}&per_page=1&orientation=landscape`;
+    const data = await fetchJson<any>(url);
+    return data.results?.[0]?.urls?.regular || null;
+  } catch {
     return null;
   }
 };
 
+export const getCityImage = async (cityName: string, country?: string, state?: string): Promise<string | null> => {
+  const targetCountry = country === 'ES' ? 'Spain' : (country || '');
+
+  const searchQueries = [
+    targetCountry ? `${cityName} ${targetCountry} cityscape landmark` : '',
+    `${cityName} architecture monument`,
+    targetCountry ? `${cityName} ${targetCountry} town` : '',
+    targetCountry ? `${cityName} ${targetCountry}` : '',
+    state && targetCountry ? `${state} province ${targetCountry} landscape` : '',
+    state ? `${state} province landscape` : '',
+    state ? `${state} landmark` : '',
+    state && targetCountry ? `${state} ${targetCountry}` : ''
+  ].filter(Boolean);
+
+  for (const query of searchQueries) {
+    const img = await fetchUnsplashImage(query);
+    if (img) return img;
+  }
+  return null;
+};
+
 export const getCitySuggestions = async (query: string) => {
   if (query.length < 3) return [];
-  const response = await fetch(`https://nominatim.openstreetmap.org/search?q=${query}&format=json&addressdetails=1&limit=5`);
-  const data = await response.json();
-  return data.map((item: any) => ({
-    name: item.name,
-    country: item.address.country_code ? item.address.country_code.toUpperCase() : '',
-    // Prioritize state, then region, then county
-    state: item.address.state || item.address.region || item.address.county || '',
-    full: `${item.name}, ${item.address.country}`,
-    lat: parseFloat(item.lat),
-    lon: parseFloat(item.lon)
-  }));
+  try {
+    const url = `${NOMINATIM_API}/search?q=${query}&format=json&addressdetails=1&countrycodes=es&featuretype=settlement&limit=15`;
+    const data = await fetchJson<any[]>(url);
+
+    const uniqueMap = new Map();
+    data.forEach(item => {
+      const state = item.address?.state || item.address?.province || item.address?.region || '';
+      const key = `${item.name}-${state}`.toLowerCase();
+
+      if (!uniqueMap.has(key)) {
+        uniqueMap.set(key, {
+          name: item.name,
+          country: 'ES',
+          state,
+          full: state ? `${item.name}, ${state} (España)` : `${item.name} (España)`,
+          lat: parseFloat(item.lat),
+          lon: parseFloat(item.lon)
+        });
+      }
+    });
+    return Array.from(uniqueMap.values()).slice(0, 5);
+  } catch {
+    return [];
+  }
 };
 
 export const getStateFromCoords = async (lat: number, lon: number) => {
   try {
-    const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=10`);
-    if (!response.ok) return null;
-    const data = await response.json();
+    const url = `${NOMINATIM_API}/reverse?format=json&lat=${lat}&lon=${lon}&zoom=10`;
+    const data = await fetchJson<any>(url);
     return data.address?.state || data.address?.region || data.address?.county || null;
-  } catch (error) {
-    console.error("Reverse Geocode Error:", error);
+  } catch {
     return null;
   }
 };
 
 export const getExtendedForecast = async (lat: number, lon: number) => {
-  const response = await fetch(
-    `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=temperature_2m,relativehumidity_2m,weathercode,apparent_temperature,precipitation_probability,uv_index,visibility,surface_pressure,windspeed_10m&daily=weathercode,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max,precipitation_sum&current_weather=true&timezone=auto`
-  );
-  const data = await response.json();
-  return data;
+  const url = `${OPEN_METEO_API}/forecast?latitude=${lat}&longitude=${lon}&hourly=temperature_2m,relativehumidity_2m,weathercode,apparent_temperature,precipitation_probability,uv_index,visibility,surface_pressure,windspeed_10m&daily=weathercode,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max,precipitation_sum&current_weather=true&timezone=auto`;
+  return fetchJson<any>(url);
 };
 
 export const getAirQuality = async (lat: number, lon: number) => {
-  const response = await fetch(
-    `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}&current=us_aqi,pm2_5,pm10,carbon_monoxide,nitrogen_dioxide,sulphur_dioxide,ozone&timezone=auto`
-  );
-  const data = await response.json();
-  return data;
-};
-
-export const getWeatherByCoords = async (lat: number, lon: number, lang: 'es' | 'en' = 'es') => {
-  const response = await fetch(`${ROOT_URL}/weather?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric&lang=${lang}`);
-  if (!response.ok) throw new Error("Weather not found for coordinates");
-  const data = await response.json();
-  // Return consistent format with getWeatherData
-  return {
-    city: data.name,
-    temp: Math.round(data.main.temp),
-    condition: data.weather[0].main,
-    description: data.weather[0].description,
-    humidity: data.main.humidity,
-    wind: Math.round(data.wind.speed * 3.6),
-    country: data.sys.country,
-    coord: data.coord
-  };
+  const url = `${AIR_QUALITY_API}/air-quality?latitude=${lat}&longitude=${lon}&current=us_aqi,pm2_5,pm10,carbon_monoxide,nitrogen_dioxide,sulphur_dioxide,ozone&timezone=auto`;
+  return fetchJson<any>(url);
 };
 
 export const getHourlyForDay = (extendedData: any, date: Date) => {
-  const startOfDay = new Date(date);
-  startOfDay.setHours(0, 0, 0, 0);
-  const endOfDay = new Date(date);
-  endOfDay.setHours(23, 59, 59, 999);
+  const startOfDay = new Date(date).setHours(0, 0, 0, 0);
+  const endOfDay = new Date(date).setHours(23, 59, 59, 999);
 
-  const indices = extendedData.hourly.time
+  return extendedData.hourly.time
     .map((t: string, i: number) => ({ time: new Date(t), index: i }))
-    .filter(({ time }: { time: Date }) => time >= startOfDay && time <= endOfDay)
-    .map(({ index }: { index: number }) => index);
-
-  return indices.map((i: number) => ({
-    time: extendedData.hourly.time[i],
-    temp: extendedData.hourly.temperature_2m[i],
-    code: extendedData.hourly.weathercode[i],
-    uv: extendedData.hourly.uv_index[i],
-    pop: extendedData.hourly.precipitation_probability[i],
-    humidity: extendedData.hourly.relativehumidity_2m[i],
-    wind: extendedData.hourly.windspeed_10m ? extendedData.hourly.windspeed_10m[i] : 0, // Note: windspeed might need to be added to fetch url if not present
-    vis: extendedData.hourly.visibility[i],
-    pressure: extendedData.hourly.surface_pressure[i]
-  }));
+    .filter(({ time }: { time: Date }) => time.getTime() >= startOfDay && time.getTime() <= endOfDay)
+    .map(({ index }: { index: number }) => ({
+      time: extendedData.hourly.time[index],
+      temp: extendedData.hourly.temperature_2m[index],
+      code: extendedData.hourly.weathercode[index],
+      uv: extendedData.hourly.uv_index[index],
+      pop: extendedData.hourly.precipitation_probability[index],
+      humidity: extendedData.hourly.relativehumidity_2m[index],
+      wind: extendedData.hourly.windspeed_10m ? extendedData.hourly.windspeed_10m[index] : 0,
+      vis: extendedData.hourly.visibility[index],
+      pressure: extendedData.hourly.surface_pressure[index]
+    }));
 };
