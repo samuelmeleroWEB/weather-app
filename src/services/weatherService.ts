@@ -63,14 +63,12 @@ export const getCityImage = async (cityName: string, country?: string, state?: s
   const targetCountry = country === 'ES' ? 'Spain' : (country || '');
 
   const searchQueries = [
-    targetCountry ? `${cityName} ${targetCountry} cityscape landmark` : '',
+    targetCountry ? `${cityName} ${targetCountry} cityscape` : '',
     `${cityName} architecture monument`,
     targetCountry ? `${cityName} ${targetCountry} town` : '',
-    targetCountry ? `${cityName} ${targetCountry}` : '',
-    state && targetCountry ? `${state} province ${targetCountry} landscape` : '',
-    state ? `${state} province landscape` : '',
-    state ? `${state} landmark` : '',
-    state && targetCountry ? `${state} ${targetCountry}` : ''
+    `${cityName} village landscape`,
+    state && targetCountry ? `${state} province ${targetCountry} nature` : '',
+    state ? `${state} province landscape` : ''
   ].filter(Boolean);
 
   for (const query of searchQueries) {
@@ -89,7 +87,13 @@ export const getCitySuggestions = async (query: string) => {
     });
 
     const uniqueMap = new Map();
+    const validPlaces = ['city', 'town', 'village', 'municipality', 'county', 'hamlet', 'suburb', 'district', 'region'];
+
     data.forEach(item => {
+      // Bloquear explícitamente calles, negocios, y asegurar que es un lugar habitable
+      if (item.class === 'highway' || item.class === 'amenity' || item.class === 'shop' || item.class === 'office') return;
+      if (!validPlaces.includes(item.addresstype) && !validPlaces.includes(item.type)) return;
+
       const state = item.address?.state || item.address?.province || item.address?.region || '';
       const key = `${item.name}-${state}`.toLowerCase();
 
