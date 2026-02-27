@@ -19,8 +19,8 @@ export const weatherCodeToKey = (code: number): string => {
   return 'Clear';
 };
 
-const fetchJson = async <T>(url: string, errorMessage = 'Fetch error'): Promise<T> => {
-  const response = await fetch(url);
+const fetchJson = async <T>(url: string, errorMessage = 'Fetch error', headers?: HeadersInit): Promise<T> => {
+  const response = await fetch(url, { headers });
   if (!response.ok) throw new Error(errorMessage);
   return response.json();
 };
@@ -84,7 +84,9 @@ export const getCitySuggestions = async (query: string) => {
   if (query.length < 3) return [];
   try {
     const url = `${NOMINATIM_API}/search?q=${query}&format=json&addressdetails=1&countrycodes=es&featuretype=settlement&limit=15`;
-    const data = await fetchJson<any[]>(url);
+    const data = await fetchJson<any[]>(url, 'Geo API Error', {
+      'Accept-Language': 'es',
+    });
 
     const uniqueMap = new Map();
     data.forEach(item => {
@@ -111,7 +113,9 @@ export const getCitySuggestions = async (query: string) => {
 export const getStateFromCoords = async (lat: number, lon: number) => {
   try {
     const url = `${NOMINATIM_API}/reverse?format=json&lat=${lat}&lon=${lon}&zoom=10`;
-    const data = await fetchJson<any>(url);
+    const data = await fetchJson<any>(url, 'Reverse Geo Error', {
+      'Accept-Language': 'es',
+    });
     return data.address?.state || data.address?.region || data.address?.county || null;
   } catch {
     return null;
