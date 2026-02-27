@@ -29,7 +29,7 @@
 ## 🌍 Live Demo
 
 ¡Prueba la aplicación en vivo!  
-👉 **[Ver Weather Mood App en Vercel](https://weather-mood-app.vercel.app/)** *(Sustituye este enlace con tu URL final de Vercel una vez desplegado)*
+👉 **[Ver Weather Mood App en Vercel]([https://weather-mood-app.vercel.app/](https://weatherappui.vercel.app/))** *(Sustituye este enlace con tu URL final de Vercel una vez desplegado)*
 
 ---
 Desarrollado con ❤️ por Samuel Melero
