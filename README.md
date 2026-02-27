@@ -29,7 +29,8 @@
 ## 🌍 Live Demo
 
 ¡Prueba la aplicación en vivo!  
-👉 🚀 Live Preview: weatherappui.vercel.app
+## 🚀 Demo
+ [weatherappui.vercel.app](https://weatherappui.vercel.app/)
 
 ---
 Desarrollado con ❤️ por Samuel Melero
